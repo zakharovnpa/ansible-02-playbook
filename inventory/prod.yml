@@ -8,3 +8,8 @@
     hosts:
       fedore:
         ansible_connection: docker
+
+  kibana:
+    hosts:
+      fedore-core:
+        ansible_connection: docker
