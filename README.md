@@ -78,33 +78,56 @@
                         # Есть папка template. Здесь лежать файлы .j2. И они вызываются по пути имя папки/имя файла. 
                         # Директорию назначеня модуль создавать не может, надо чтобы директория уже была создана.
                         # Системня директория /etc/profile.d/ уже существует.
-        src: jdk.sh.j2
-        dest: /etc/profile.d/jdk.sh
-      tags: java
+        src: jdk.sh.j2    # файл шаблона из папки t/emplate
+        dest: /etc/profile.d/jdk.sh   # путь на  manage_node, куда надо перенести шаблон и сделать его сценарием .sh
+      tags: java    # Тег, позволяющий запускать таску по условию запуска по тегам
       
       
-- name: Install Elasticsearch
-  hosts: elasticsearch
-  tasks:
-    - name: Upload tar.gz Elasticsearch from remote URL
-      get_url:
-        url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elastic_version }}-linux-x86_64.tar.gz"
-        dest: "/tmp/elasticsearch-{{ elastic_version }}-linux-x86_64.tar.gz"
-        mode: 0755
-        timeout: 60
-        force: true
-        validate_certs: false
-      register: get_elastic
-      until: get_elastic is succeeded
-      tags: elastic
-    - name: Create directrory for Elasticsearch
-      become: true
-      file:
-        state: directory
-        path: "{{ elastic_home }}"
-      tags: elastic
-    - name: Extract Elasticsearch in the installation directory
-      become: true
+ #  Второй Play по установке Elasticsearch
+- name: Install Elasticsearch     # Название Play
+  hosts: elasticsearch            # Play будет запускатсья на хостах из группы elasticsearch нашего инвентори
+  tasks:                          # Список задач в составе Play
+  
+  # Задача первая. 
+  # Цель задачи - скачать с официального сайта файла с архивом Elasticsearch на manage_node
+    - name: Upload tar.gz Elasticsearch from remote URL     #  Название задачи
+      get_url:        # Модуль для скачивания файла и переноса его в указанноую директорию
+        url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elastic_version }}-linux-x86_64.tar.gz"   # Адрес расположения архива 
+                          # параметризирован при помощи group_vars {{ elastic_version }} на то, какую именно версию искать
+                          #  Здесь нет модуля delegate_to, поэтому скачивание будет происходить сразу на manage_node
+        
+        dest: "/tmp/elasticsearch-{{ elastic_version }}-linux-x86_64.tar.gz"    # Папка, куда будет сохраняться архив
+        mode: 0755      # Установление прав доступа к файлу-архиву
+        timeout: 60     # Ожидание 60 секунд для get_url
+        force: true     # Если архив Elasticsearch уже ранее был скачан и существует, то будет принудительно перезакачивание архива
+        validate_certs: false    # get_url не будет реагировать ошибки свзанные с отсутствием сертификата SSL сайта
+      register: get_elastic      # результат записываем в переменную get_elastic
+      until: get_elastic is succeeded      # цикл until будет запускать задачу скачивания архива до тех пор, пока не будет удачное скачивание
+      
+      #  Пример работы цикла
+      
+      # TASK [Upload tar.gz Elasticsearch from remote URL] 
+      # *******************************************************************************************************************************************************
+      # FAILED - RETRYING: [fedore]: Upload tar.gz Elasticsearch from remote URL (3 retries left).
+      # ok: [fedore]
+      
+      tags: elastic     # Тег, позволяющий запускать таску по условию запуска по тегам
+      
+      
+  # Задача вторая. 
+  # Цель задачи - создать директорию для Elasticsearch
+    - name: Create directrory for Elasticsearch     #  Название задачи
+      become: true        # Модуль повышения привелегий пользователя для выполнения действия.
+      file:               # Модуль file для создания state-ом директорий. 
+        state: directory    #  Создание модулем state директории без помощи фактов
+        path: "{{ elastic_home }}"    #  Путь к домашней директории взят из group_vars
+      tags: elastic       # Тег, позволяющий запускать таску по условию запуска по тегам
+      
+  # Задача третья. 
+  # Цель задачи - разархивировать файлы и скопировать их в домашнюю директорию.
+  # Действия и модули аналогичные из Play для Java
+    - name: Extract Elasticsearch in the installation directory     #  Название задачи
+      become: true      
       unarchive:
         copy: false
         src: "/tmp/elasticsearch-{{ elastic_version }}-linux-x86_64.tar.gz"
@@ -113,10 +136,16 @@
         creates: "{{ elastic_home }}/bin/elasticsearch"
       tags:
         - elastic
+        
+        
+   # Задача четвертая. 
+  # Цель задачи -  выполнить перенос переменных окружения из шаблонов .j2 в каталог сценариев приложений etc/profile.d/ 
+  # Действия и модули аналогичные из Play для Java
     - name: Set environment Elastic
       become: true
       template:
         src: templates/elk.sh.j2
         dest: /etc/profile.d/elk.sh
       tags: elastic
+      
       ```
