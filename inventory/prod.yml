@@ -1,6 +1,10 @@
 ---
-elasticsearch:
-  hosts:
-    localhost:
-      ansible_connection: ssh
-      ansible_user: root
+  deb:
+    hosts:
+      ubuntu:
+        ansible_connection: docker
+
+  elasticsearch:
+    hosts:
+      fedore:
+        ansible_connection: docker
