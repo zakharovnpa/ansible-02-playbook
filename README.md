@@ -29,68 +29,82 @@
   - Закачиваем на `manage_node` файл с архивом, который находится на `control_node` по пути, указанному в переменной `java_oracle_jdk_package` из файла `group_vars/all/vars.yml`. Файл с архивом был подготовлен заранее и расположен в директории `/files` плейбука.
 
 ```yml
-    - name: Upload .tar.gz file containing binaries from local storage     #  Название задачи.     
-      copy:         # Модуль copy ищет файл на локалхосте и отправляет его на manage_node по пути в dest: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"
-        src: "{{ java_oracle_jdk_package }}"    #  Ищет в локальной директории /files
-        dest: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"    #  Отправляет на manage_node
-      register: download_java_binaries          #  register записывает результат в переменную download_java_binaries
-      until: download_java_binaries is succeeded    #  Цикл будет выполнять таску, пока не произойдет условие цикла `download_java_binaries is succeeded`
-      tags: java     # Тег, позволяющий запускать таску по условию запуска по тегам
+    - name: Upload .tar.gz file containing binaries from local storage     
+      copy:         
+        src: "{{ java_oracle_jdk_package }}"    
+        dest: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"   
+      register: download_java_binaries        
+      until: download_java_binaries is succeeded  
+      tags: java    
 ```
 * `- name: Upload .tar.gz file containing binaries from local storage`      Название задачи.     
 * `copy:` Модуль `copy` ищет файл на `localhost` и отправляет его на `manage_node` по пути в `dest: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"`
 * `src: "{{ java_oracle_jdk_package }}"`   Источник, где находится файл с архивом. По умолчанию - в директории `/files` плейбука на `control_node`
 * `dest: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"`   Место назначения. Находится на `manage_node`
 * `register: download_java_binaries`         Модуль `register` записывает результат в переменную `download_java_binaries`
-* `until: download_java_binaries is succeeded`    Цикл `until` будет выполнять задачу, пока не произойдет условие цикла `download_java_binaries is succeeded` - успешное скачивание архива и целевую директорию. При нахождении директории источника и назначения в пределах локальной сети данный цикл становится избыточным, т.к. обрывы в работе сети маловероятны.
+* `until: download_java_binaries is succeeded`    Цикл `until` будет выполнять задачу, пока не произойдет условие цикла `download_java_binaries is succeeded` - успешное скачивание архива и целевую директорию. При нахождении директорий источника и назначения в пределах локальной сети данный цикл становится избыточным, т.к. обрывы в работе сети маловероятны.
 * `tags: java`    Тег, позволяющий запускать таску по условию запуска по тегам. В данном случае только при установке Java.
       
 ###  Задача третья.
 * Цель задачи - создать поддиректории для переноса в них распакованных файлов из архива
 ```yml
-    - name: Ensure installation dir exists    #  Название задачи
-      become: true        # Модуль повышения привелегий пользователя для выполнения действия. По умолчению это root. Может запускаться с ключем become-user=root. 
-                          # При этом на manage_node должен быть установлен sudo
-      file:           # Модуль file для создания state-ом директорий. 
-        state: directory    #  Метод state. При помощи переменнх group_vars будут созданы все поддиректории, 
-                            # которые в этом пути указаны.
-        path: "{{ java_home }}"      #  Путь до домашнего каталога Java на manage_node
-      tags: java      # Тег, позволяющий запускать таску по условию запуска по тегам
+    - name: Ensure installation dir exists 
+      become: true       
+      file:       
+        state: directory   
+        path: "{{ java_home }}"  
+      tags: java  
  ```
+ * `- name: Ensure installation dir exists`     Название задачи
+ * `become: true`        Модуль повышения привелегий пользователя для выполнения действия. По умолчению это root. Может запускаться с ключем `--become-user=<user>`. При этом на manage_node должен быть установлен `sudo`
+ * `file:`          Модуль `file` для создания  методом `state` директорий. 
+ * `state: directory`    Метод `state`. При помощи переменнх из `group_vars` будут созданы все поддиректории, которые в этом пути указаны.
+ * `path: "{{ java_home }}"`    Путь до домашнего каталога Java на `manage_node`
+ * `tags: java`  Тег, позволяющий запускать таску по условию запуска по тегам. В данном случае только при установке Java.
       
 ###  Задача четвертая.
 * Цель задачи - разархивировать файлы и скопировать их в домашнюю директорию.
 ```yml
-    - name: Extract java in the installation directory     #  Название задачи
-      become: true      # Модуль повышения привелегий пользователя для выполнения действия.
-      unarchive:    # с помощью модуля ` unarchive ` мы из `src: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"`  распаковываем архив, 
-                    # который распакуется и будет находится на `manage_node` по пути в `dest: "{{ java_home }}"`
-
+    - name: Extract java in the installation directory   
+      become: true     
+      unarchive: 
         copy: false
-        src: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"     # путь до местонахождения архива 
-        dest: "{{ java_home }}"                           # путь до директории, куда будет распакован архив
-        mode: 0755                                        # установление системных прав доступа к директории
-        extra_opts: [--strip-components=1]                # опция для длинных путей
-        creates: "{{ java_home }}/bin/java"     # модуль `creates` после того, как распакует архив, проверяет, что по `{{ java_home }}/bin/java` пути
-                                                # созданы файлы. Если файлы не найдутся, то таска зафейлится
-        
+        src: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"    
+        dest: "{{ java_home }}"                   
+        mode: 0755                                    
+        extra_opts: [--strip-components=1]            
+        creates: "{{ java_home }}/bin/java"         
       tags:
-        - java          # Тег, позволяющий запускать таску по условию запуска по тегам
+        - java
  ```
+* `- name: Extract java in the installation directory`    Название задачи
+* `become: true`      Модуль повышения привелегий пользователя для выполнения действия.
+* `unarchive:`    С помощью модуля ` unarchive ` мы из `src: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"`  распаковываем архив, который распакуется и будет находится на `manage_node` по пути в `dest: "{{ java_home }}"`
+* `copy: false`
+* `src: "/tmp/jdk-{{ java_jdk_version }}.tar.gz"`     Путь до местонахождения архива 
+* `dest: "{{ java_home }}"`         Путь до директории, куда будет распакован архив
+* `mode: 0755`                                   Установление системных прав доступа к директории
+* `extra_opts: [--strip-components=1]`           Опция для длинных путей
+* `creates: "{{ java_home }}/bin/java"`     Модуль `creates` после того, как распакует архив, проверяет, что по `{{ java_home }}/bin/java` пути созданы файлы. Если файлы не найдутся, то задача закончится с ошибкой `fail`
+* `tags: java`     ег, позволяющий запускать таску по условию запуска по тегам. В данном случае только при установке Java.
  
  ###  Задача пятая.  
  * Цель задачи - выполнить перенос переменных окружения из шаблонов .j2 в каталог сценариев приложений etc/profile.d/
  ```yml
-    - name: Export environment variables        #  Название задачи
-      become: true                              # Модуль повышения привелегий пользователя для выполнения действия.
-      template:         # template - модуль для проброса файла шаблона .j2 на manage-node в файл jdk.sh который создается с наполнением, котороее сть в teamplate
-                        # Есть папка template. Здесь лежать файлы .j2. И они вызываются по пути имя папки/имя файла. 
-                        # Директорию назначеня модуль создавать не может, надо чтобы директория уже была создана.
-                        # Системня директория /etc/profile.d/ уже существует.
-        src: jdk.sh.j2    # файл шаблона из папки t/emplate
-        dest: /etc/profile.d/jdk.sh   # путь на  manage_node, куда надо перенести шаблон и сделать его сценарием .sh
-      tags: java    # Тег, позволяющий запускать таску по условию запуска по тегам
+    - name: Export environment variables    
+      become: true               
+      template:      
+        src: jdk.sh.j2  
+        dest: /etc/profile.d/jdk.sh  
+      tags: java  
  ```
+* `- name: Export environment variables`    Название задачи
+* `become: true`        Модуль повышения привелегий пользователя для выполнения действия.
+* `template:`    Модуль для проброса файла шаблона `.j2` в направлении `manage-node` в файл `jdk.sh` который создается с наполнением, котороее есть в директории `/teamplate`. Здесь лежать файлы `.j2`. И они вызываются по пути `folders/name.files`. Директорию назначенbя модуль `template` создавать не может, необходимо,  чтобы директория заранее была создана. А вот системня директория `/etc/profile.d/` уже существует.
+* `src: jdk.sh.j2`    Файл шаблона из папки `/template`
+* `dest: /etc/profile.d/jdk.sh`   Путь на  `manage_node`, куда будет перенесен шаблон и сделан на его основе сценарий `.sh`
+* `tags: java`   Тег, позволяющий запускать таску по условию запуска по тегам
+ 
  ---
  ##  Второй Play. Установка Elasticsearch
 ```yml
